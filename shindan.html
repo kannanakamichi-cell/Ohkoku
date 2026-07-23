@@ -105,7 +105,43 @@ async function run(){
     return;
   }
 
-  add(true,"🎉 すべて正常です","この2つの値をindex.htmlのSUPABASE_URL / SUPABASE_KEYに貼れば動きます。貼ってあるのに動かない場合は、index.html側の貼り付けミス(引用符の欠け・全角化)が原因です。");
+  // 5. 公開中のindex.htmlに埋まっている値を自動検査
+  try{
+    const ir=await fetch("./index.html?nocache="+Date.now(),{cache:"no-store"});
+    const html=await ir.text();
+    const mu=html.match(/SUPABASE_URL\s*=\s*"([^"]*)"/);
+    const mk=html.match(/SUPABASE_KEY\s*=\s*"([^"]*)"/);
+    if(!mu||!mk){
+      add(false,"index.htmlから設定を読み取れません","","index.htmlが古い形式か、まだデプロイ中です。5分後にもう一度診断してください。");
+      return;
+    }
+    const eu=mu[1], ek=mk[1];
+    if(eu!==u){
+      add(false,"index.htmlのURLが本物と違います","埋め込み:<code>"+eu+"</code>","index.htmlのSUPABASE_URLを <code>"+u+"</code> に貼り替えてください。");
+      return;
+    }
+    if(ek===k){
+      add(true,"index.htmlのキーは本物と完全一致");
+      // 埋め込みキーで実際に書き込みテスト(アプリと同条件)
+      const H2={"apikey":ek,"Content-Type":"application/json"};
+      if(ek.indexOf("eyJ")===0)H2["Authorization"]="Bearer "+ek;
+      const w2=await fetch(u+"/rest/v1/kv",{method:"POST",headers:{...H2,"Prefer":"resolution=merge-duplicates"},body:JSON.stringify([{k:"diag_embed",v:"1"}])});
+      if(w2.ok){
+        add(true,"🎉 アプリと同条件の書き込みも成功","<b>すべて開通しています。</b>ブラウザが古いページを表示している可能性が最後の壁です。","<b>Cmd+Shift+N(シークレットウィンドウ)</b>で https://kannanakamichi-cell.github.io/Ohkoku/ を開いて開国してください。それでもダメならこの画面のスクショをClaudeへ。");
+      }else{
+        add(false,"埋め込みキーでの書き込みが失敗("+w2.status+")","<code>"+(await w2.text()).slice(0,140)+"</code>","この画面のスクショをClaudeに送ってください。");
+      }
+    }else{
+      let pos=-1;
+      for(let i=0;i<Math.max(ek.length,k.length);i++){ if(ek[i]!==k[i]){pos=i;break;} }
+      add(false,"index.htmlのキーが本物と違います!(これが原因)",
+        "長さ:埋め込み"+ek.length+"文字 / 本物"+k.length+"文字<br>"+
+        (pos>=0?("最初に違うのは<b>"+(pos+1)+"文字目</b>:埋め込み=<code>"+(ek[pos]||"(なし)")+"</code> / 本物=<code>"+(k[pos]||"(なし)")+"</code>"):""),
+        "GitHubのindex.htmlを開き、SUPABASE_KEYの行の<b>引用符の中身を全部削除</b>してから、Supabaseの📋ボタンでコピーした本物を貼ってコミットしてください。");
+    }
+  }catch(e){
+    add(false,"index.htmlの検査でエラー",e.message,"この画面のスクショをClaudeへ。");
+  }
 }
 </script>
 </body>
