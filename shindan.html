@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oh!国 接続診断</title>
+<style>
+  body{font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,sans-serif;background:#F8F8F8;color:#000;display:flex;justify-content:center;margin:0;min-height:100vh}
+  .wrap{width:100%;max-width:520px;padding:20px 16px 60px}
+  h1{font-size:17px;letter-spacing:.08em}
+  h1 span{color:#FF2E47}
+  p.d{font-size:12px;color:#777;line-height:1.8}
+  label{display:block;font-size:11px;font-weight:700;color:#777;margin-top:14px}
+  input{width:100%;box-sizing:border-box;border:1.5px solid #E5E5E5;border-radius:10px;padding:12px;font-size:13px;margin-top:6px;font-family:ui-monospace,Menlo,monospace}
+  button{width:100%;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:700;background:#FF2E47;color:#fff;margin-top:16px;cursor:pointer;font-family:inherit}
+  .item{background:#fff;border:1px solid #E5E5E5;border-radius:12px;padding:12px 14px;margin-top:10px;font-size:13px;line-height:1.7}
+  .item b{display:block}
+  .ok{border-left:5px solid #1E9E5A}
+  .ng{border-left:5px solid #FF2E47}
+  .item .fix{font-size:11.5px;color:#555;background:#FFF0F2;border-radius:8px;padding:8px 10px;margin-top:6px;display:block}
+  code{background:#EFEFEF;border-radius:4px;padding:1px 5px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span>!</span> Oh!国 接続診断</h1>
+  <p class="d">SupabaseのURLと「Publishable key(sb_publishable_...)」を貼って診断開始を押してください。どこで詰まっているかを日本語で表示します。</p>
+  <label>Project URL</label>
+  <input id="u" placeholder="https://uxvdcpnhovnsjwlgswrp.supabase.co">
+  <label>Publishable key(または旧anonキー)</label>
+  <input id="k" placeholder="sb_publishable_... / eyJ...">
+  <button onclick="run()">🔍 診断開始</button>
+  <div id="out"></div>
+</div>
+<script>
+const out=document.getElementById("out");
+function add(ok,title,detail,fix){
+  const d=document.createElement("div");
+  d.className="item "+(ok?"ok":"ng");
+  d.innerHTML="<b>"+(ok?"✅ ":"❌ ")+title+"</b>"+(detail||"")+(fix?'<span class="fix">対処:'+fix+"</span>":"");
+  out.appendChild(d);
+}
+async function run(){
+  out.innerHTML="";
+  const u=document.getElementById("u").value.trim().replace(/\/+$/,"");
+  const k=document.getElementById("k").value.trim();
+
+  // 1. URL形式
+  if(!/^https:\/\/[a-z0-9]+\.supabase\.co$/.test(u)){
+    add(false,"URLの形式が正しくありません","入力値:<code>"+ (u||"(空)") +"</code>","SupabaseのHomeに表示される <code>https://〜.supabase.co</code> をそのまま貼ってください。末尾に文字を足さないこと。");
+    return;
+  }
+  add(true,"URLの形式はOK","<code>"+u+"</code>");
+
+  // 2. キー形式
+  if(k.indexOf("sb_secret_")===0){
+    add(false,"これはSecret key(秘密鍵)です","","1つ上に表示されている <b>Publishable key(sb_publishable_...)</b> をコピーして貼り直してください。Secretは絶対にHTMLに貼らないでください。");
+    return;
+  }
+  if(!(k.indexOf("sb_publishable_")===0||k.indexOf("eyJ")===0)){
+    add(false,"キーの形式が正しくありません","入力値の先頭:<code>"+k.slice(0,14)+"…</code>","Settings→API Keysの <b>Publishable key</b> を、コピーボタン📋で丸ごとコピーして貼ってください(手打ちや途中までのコピーはNG)。");
+    return;
+  }
+  add(true,"キーの形式はOK","<code>"+k.slice(0,20)+"…</code>("+(k.indexOf("eyJ")===0?"旧形式":"新形式")+")");
+
+  const H={"apikey":k,"Content-Type":"application/json"};
+  if(k.indexOf("eyJ")===0)H["Authorization"]="Bearer "+k;
+
+  // 3. 読み取りテスト(テーブル存在+権限)
+  let r;
+  try{
+    r=await fetch(u+"/rest/v1/kv?select=k&limit=1",{headers:H});
+  }catch(e){
+    add(false,"Supabaseに接続できません","ネットワークエラー:"+e.message,"URLの綴りとインターネット接続を確認してください。");
+    return;
+  }
+  const txt=await r.text();
+  if(r.status===200){
+    add(true,"テーブル kv の読み取りOK");
+  }else if(r.status===404||txt.indexOf("does not exist")>=0||txt.indexOf("Could not find the table")>=0){
+    add(false,"テーブル kv がありません(SQL未実行)","応答:"+r.status,"Supabaseの <b>SQL Editor</b> で次の3行を実行してください:<br><code>create table kv (k text primary key, v text not null);</code><br><code>alter table kv enable row level security;</code><br><code>create policy \"kv_all\" on kv for all using (true) with check (true);</code>");
+    return;
+  }else if(r.status===401||r.status===403){
+    add(false,"認証エラー("+r.status+")","応答:<code>"+txt.slice(0,120)+"</code>","キーが間違っているか無効化されています。Settings→API KeysでPublishable keyをコピーし直してください。");
+    return;
+  }else{
+    add(false,"読み取りで予期しないエラー("+r.status+")","<code>"+txt.slice(0,160)+"</code>","この画面のスクショをClaudeに送ってください。");
+    return;
+  }
+
+  // 4. 書き込みテスト
+  let w;
+  try{
+    w=await fetch(u+"/rest/v1/kv",{method:"POST",headers:{...H,"Prefer":"resolution=merge-duplicates"},body:JSON.stringify([{k:"diag_test",v:JSON.stringify({t:Date.now()})}])});
+  }catch(e){ add(false,"書き込みで接続エラー",e.message,""); return; }
+  if(w.ok){
+    add(true,"書き込みテストOK");
+  }else{
+    const wt=await w.text();
+    if(w.status===401||w.status===403||wt.indexOf("row-level security")>=0){
+      add(false,"書き込みが拒否されました(ポリシー未設定)","応答:"+w.status,"SQL Editorで次を実行:<br><code>create policy \"kv_all\" on kv for all using (true) with check (true);</code>");
+    }else{
+      add(false,"書き込みで予期しないエラー("+w.status+")","<code>"+wt.slice(0,160)+"</code>","この画面のスクショをClaudeに送ってください。");
+    }
+    return;
+  }
+
+  add(true,"🎉 すべて正常です","この2つの値をindex.htmlのSUPABASE_URL / SUPABASE_KEYに貼れば動きます。貼ってあるのに動かない場合は、index.html側の貼り付けミス(引用符の欠け・全角化)が原因です。");
+}
+</script>
+</body>
+</html>
