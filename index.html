@@ -503,7 +503,7 @@
       SUPABASE_URL: プロジェクトURL(例 https://abcd1234.supabase.co)
       SUPABASE_KEY: anon public キー                                   */
 const SUPABASE_URL = "https://uxvdcpnhovnsjwlgswrp.supabase.co";
-const SUPABASE_KEY = "sb_publishable_ykmqfLuRskJw2Cyj0l4zMw_Uft30q42";
+const SUPABASE_KEY = "sb_publishable_ykmqfLuRskJw2Cyj0l4zMw_Uft3Oq42";
 
 const USE_SB = SUPABASE_URL.startsWith("https://") && SUPABASE_KEY.length > 20;
 const SBH = ()=>{ const h={ "apikey":SUPABASE_KEY, "Content-Type":"application/json" }; if(SUPABASE_KEY.indexOf("eyJ")===0) h["Authorization"]="Bearer "+SUPABASE_KEY; return h; };
